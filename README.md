@@ -16,11 +16,12 @@
 ### Примеры работающих ботов:
 **Telegram-бот:** Перейдите по ссылке, чтобы увидеть пример работы [Telegram-бота](https://t.me/SimpleQuizzzBot).
 
-![ScreenRecording_04-06-2025 22-01-37_1](https://github.com/user-attachments/assets/8584bc0f-10ae-4e2f-9bff-b8ef14d421d8)
+![D33E07EE-E5EB-45A8-A705-E1A4AC4F5440](https://github.com/user-attachments/assets/ef51b0e1-bd17-4381-a5ff-ffd4162850d1)
+
 
 **VK-бот:** Заходите в [группу в ВКонтакте](https://vk.com/club230159177) и напишите сообщение в чат, чтобы увидеть, как бот работает.
 
-![ScreenRecording_04-06-2025 22-07-53_1](https://github.com/user-attachments/assets/2d8cee80-d51d-480f-8ef0-8cb7d483253a)
+![F2A7384B-A382-45C6-8ABA-088FE33634AD](https://github.com/user-attachments/assets/9d45b78a-6179-44cd-b69e-6b0afb7f8b8a)
 
 ## Установка и настройка
 
