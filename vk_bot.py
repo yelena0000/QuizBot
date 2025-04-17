@@ -77,7 +77,15 @@ def main():
             message = event.text.strip()
 
             try:
-                if message == 'Новый вопрос':
+                if message.lower() in ('начать', '/start'):
+                    vk.messages.send(
+                        user_id=user_id,
+                        message='Привет! Я бот для викторин 🧠\nНажми кнопку, чтобы начать.',
+                        random_id=get_random_id(),
+                        keyboard=keyboard.get_keyboard(),
+                    )
+
+                elif message == 'Новый вопрос':
                     question = random.choice(all_questions)
                     redis_conn.set(
                         f'vk_quiz:{user_id}:answer',

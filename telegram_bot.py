@@ -46,11 +46,19 @@ def parse_questions_from_file(filepath):
 
 
 def start(update: Update, context: CallbackContext):
+    redis_conn = context.bot_data['redis']
+    user_id = update.effective_user.id
+
+    redis_conn.delete(f'quiz:{user_id}:answer')
+
     custom_keyboard = [['Новый вопрос', 'Сдаться'],
                        ['Мой счёт']]
     reply_markup = ReplyKeyboardMarkup(custom_keyboard, resize_keyboard=True)
+
     update.message.reply_text(
-        'Привет! Я бот для викторин 🧠', reply_markup=reply_markup
+        'Привет! Я бот для викторин 🧠\n\n'
+        'Нажми «Новый вопрос», чтобы начать.',
+        reply_markup=reply_markup
     )
     return States.QUESTION
 
@@ -120,7 +128,7 @@ def handle_score(update: Update, context: CallbackContext):
 def main():
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.INFO
+        level=logging.ERROR
     )
     logger.setLevel(logging.DEBUG)
 
@@ -137,7 +145,7 @@ def main():
         redis_conn.ping()
 
         tg_bot_token = env.str('TG_BOT_TOKEN')
-    except Exception as error:
+    except Exception:
         logger.exception("Ошибка при инициализации окружения или Redis:")
         return
 
@@ -150,7 +158,7 @@ def main():
 
         if not all_questions:
             logger.warning("Не загружено ни одного вопроса.")
-    except Exception as error:
+    except Exception:
         logger.exception("Ошибка при чтении вопросов:")
         return
 
@@ -183,16 +191,15 @@ def main():
                     ),
                 ],
             },
-            fallbacks=[],
+            fallbacks=[CommandHandler('start', start)],
         )
 
         dp.add_handler(conv_handler)
 
-        logger.info("Бот успешно запущен.")
         updater.start_polling()
         updater.idle()
 
-    except Exception as error:
+    except Exception:
         logger.exception("Ошибка при запуске бота:")
 
 
