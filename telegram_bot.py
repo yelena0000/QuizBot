@@ -2,6 +2,7 @@ import logging
 import os
 import random
 import re
+from enum import Enum
 
 import redis
 from environs import Env
@@ -12,9 +13,15 @@ from telegram.ext import (
     MessageHandler,
     Filters,
     CallbackContext,
+    ConversationHandler,
 )
 
+
 logger = logging.getLogger(__file__)
+
+
+class States(Enum):
+    QUESTION = 1
 
 
 def parse_questions_from_file(filepath):
@@ -22,8 +29,8 @@ def parse_questions_from_file(filepath):
         content = file.read()
 
     raw_questions = content.strip().split('\n\n')
-
     qa_pairs = []
+
     current_question = {}
 
     for block in raw_questions:
@@ -38,50 +45,76 @@ def parse_questions_from_file(filepath):
     return qa_pairs
 
 
-def start(update: Update, context: CallbackContext) -> None:
-    """Ответ на /start с клавиатурой."""
+def start(update: Update, context: CallbackContext):
     custom_keyboard = [['Новый вопрос', 'Сдаться'],
                        ['Мой счёт']]
     reply_markup = ReplyKeyboardMarkup(custom_keyboard, resize_keyboard=True)
-    update.message.reply_text('Привет! Я бот для викторин', reply_markup=reply_markup)
+    update.message.reply_text(
+        'Привет! Я бот для викторин 🧠', reply_markup=reply_markup
+    )
+    return States.QUESTION
 
 
-def handle_message(update: Update, context: CallbackContext) -> None:
-    user_message = update.message.text
-    questions = context.bot_data.get('questions', [])
-    redis_conn = context.bot_data.get('redis')
+def handle_new_question_request(update: Update, context: CallbackContext):
+    questions = context.bot_data['questions']
+    redis_conn = context.bot_data['redis']
     user_id = update.effective_user.id
 
-    if user_message == "Новый вопрос":
-        question_content = random.choice(questions)
-        question = question_content['question']
-        answer = question_content ['answer']
-        redis_conn.set(f'quiz:{user_id}:answer', answer)
-        update.message.reply_text(question)
+    question_data = random.choice(questions)
+    redis_conn.set(f'quiz:{user_id}:answer', question_data['answer'])
 
-    elif user_message == "Сдаться":
-        answer = redis_conn.get(f'quiz:{user_id}:answer')
-        if answer:
-            update.message.reply_text(f'Правильный ответ: {answer}')
-            redis_conn.delete(f'quiz:{user_id}:answer')
-        else:
-            update.message.reply_text('Сначала задай мне вопрос 🙂')
+    update.message.reply_text(question_data['question'])
+    return States.QUESTION
 
-    elif user_message == "Мой счёт":
-        update.message.reply_text("Скоро будет... 😉")
 
+def handle_solution_attempt(update: Update, context: CallbackContext):
+    redis_conn = context.bot_data['redis']
+    user_id = update.effective_user.id
+    correct_answer = redis_conn.get(f'quiz:{user_id}:answer')
+
+    if correct_answer is None:
+        update.message.reply_text(
+            'Сначала запроси новый вопрос 😉'
+        )
+        return States.QUESTION
+
+    user_reply = update.message.text.strip().lower()
+    clean_answer = re.split(r'[.(]', correct_answer)[0].strip().lower()
+
+    if clean_answer in user_reply or user_reply in clean_answer:
+        update.message.reply_text(
+            'Правильно! 🎉 Для следующего вопроса нажми «Новый вопрос»'
+        )
+        redis_conn.delete(f'quiz:{user_id}:answer')
+        return States.QUESTION
     else:
-        correct_answer = redis_conn.get(f'quiz:{user_id}:answer')
-        if correct_answer is None:
-            update.message.reply_text('Сначала запроси новый вопрос 😉')
-        else:
-            user_reply = user_message.strip().lower()
-            clean_answer = re.split(r'[.(]', correct_answer)[0]
-            if clean_answer in user_reply or user_reply in clean_answer:
-                update.message.reply_text('Правильно! Поздравляю! 🎉 Для следующего вопроса нажми «Новый вопрос»')
-                redis_conn.delete(f'quiz:{user_id}:answer')
-            else:
-                update.message.reply_text('Неправильно… 😢 Попробуй ещё раз или нажми «Сдаться».')
+        update.message.reply_text(
+            'Неправильно… 😢 Попробуй ещё раз или нажми «Сдаться».'
+        )
+        return States.QUESTION
+
+
+def handle_surrender(update: Update, context: CallbackContext):
+    redis_conn = context.bot_data['redis']
+    user_id = update.effective_user.id
+    correct_answer = redis_conn.get(f'quiz:{user_id}:answer')
+
+    if correct_answer:
+        update.message.reply_text(f'Правильный ответ: {correct_answer}')
+        redis_conn.delete(f'quiz:{user_id}:answer')
+    else:
+        update.message.reply_text(
+            'Ты пока не задал вопрос.'
+        )
+
+    return handle_new_question_request(update, context)
+
+
+def handle_score(update: Update, context: CallbackContext):
+    update.message.reply_text(
+        'Скоро будет... 😉'
+    )
+    return States.QUESTION
 
 
 def main():
@@ -91,34 +124,76 @@ def main():
     )
     logger.setLevel(logging.DEBUG)
 
-    env = Env()
-    env.read_env()
+    try:
+        env = Env()
+        env.read_env()
 
-    redis_conn = redis.Redis(
-        host=env.str('REDIS_HOST'),
-        port=env.int('REDIS_PORT'),
-        password=env.str('REDIS_PASSWORD'),
-        decode_responses=True
-    )
+        redis_conn = redis.Redis(
+            host=env.str('REDIS_HOST'),
+            port=env.int('REDIS_PORT'),
+            password=env.str('REDIS_PASSWORD'),
+            decode_responses=True
+        )
+        redis_conn.ping()
 
-    tg_bot_token = env.str('TG_BOT_TOKEN')
-    updater = Updater(tg_bot_token, use_context=True)
-    dp = updater.dispatcher
+        tg_bot_token = env.str('TG_BOT_TOKEN')
+    except Exception as error:
+        logger.exception("Ошибка при инициализации окружения или Redis:")
+        return
 
-    all_questions = []
-    for filename in os.listdir('quiz_questions'):
-        if filename.endswith('.txt'):
-            path = os.path.join('quiz_questions', filename)
-            all_questions.extend(parse_questions_from_file(path))
+    try:
+        all_questions = []
+        for filename in os.listdir('quiz_questions'):
+            if filename.endswith('.txt'):
+                path = os.path.join('quiz_questions', filename)
+                all_questions.extend(parse_questions_from_file(path))
 
-    dp.bot_data['questions'] = all_questions
-    dp.bot_data['redis'] = redis_conn
+        if not all_questions:
+            logger.warning("Не загружено ни одного вопроса.")
+    except Exception as error:
+        logger.exception("Ошибка при чтении вопросов:")
+        return
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    try:
+        updater = Updater(tg_bot_token, use_context=True)
+        dp = updater.dispatcher
 
-    updater.start_polling()
-    updater.idle()
+        dp.bot_data['questions'] = all_questions
+        dp.bot_data['redis'] = redis_conn
+
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('start', start)],
+            states={
+                States.QUESTION: [
+                    MessageHandler(
+                        Filters.regex('^(Новый вопрос)$'),
+                        handle_new_question_request
+                    ),
+                    MessageHandler(
+                        Filters.regex('^(Сдаться)$'),
+                        handle_surrender
+                    ),
+                    MessageHandler(
+                        Filters.regex('^(Мой счёт)$'),
+                        handle_score
+                    ),
+                    MessageHandler(
+                        Filters.text & ~Filters.command,
+                        handle_solution_attempt
+                    ),
+                ],
+            },
+            fallbacks=[],
+        )
+
+        dp.add_handler(conv_handler)
+
+        logger.info("Бот успешно запущен.")
+        updater.start_polling()
+        updater.idle()
+
+    except Exception as error:
+        logger.exception("Ошибка при запуске бота:")
 
 
 if __name__ == '__main__':
