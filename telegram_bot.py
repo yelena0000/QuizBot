@@ -1,5 +1,4 @@
 import logging
-import os
 import random
 import re
 from enum import Enum
@@ -16,33 +15,14 @@ from telegram.ext import (
     ConversationHandler,
 )
 
+from quiz_questions_loader import load_all_questions
+
 
 logger = logging.getLogger(__file__)
 
 
 class States(Enum):
     QUESTION = 1
-
-
-def parse_questions_from_file(filepath):
-    with open(filepath, encoding='koi8-r') as file:
-        content = file.read()
-
-    raw_questions = content.strip().split('\n\n')
-    qa_pairs = []
-
-    current_question = {}
-
-    for block in raw_questions:
-        if block.startswith('Вопрос'):
-            current_question['question'] = block.partition(':')[2].strip()
-        elif block.startswith('Ответ'):
-            current_question['answer'] = block.partition(':')[2].strip()
-            if 'question' in current_question and 'answer' in current_question:
-                qa_pairs.append(current_question)
-            current_question = {}
-
-    return qa_pairs
 
 
 def start(update: Update, context: CallbackContext):
@@ -150,11 +130,7 @@ def main():
         return
 
     try:
-        all_questions = []
-        for filename in os.listdir('quiz_questions'):
-            if filename.endswith('.txt'):
-                path = os.path.join('quiz_questions', filename)
-                all_questions.extend(parse_questions_from_file(path))
+        all_questions = load_all_questions()
 
         if not all_questions:
             logger.warning("Не загружено ни одного вопроса.")
