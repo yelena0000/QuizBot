@@ -49,7 +49,7 @@ def start(update: Update, context: CallbackContext):
     redis_conn = context.bot_data['redis']
     user_id = update.effective_user.id
 
-    redis_conn.delete(f'quiz:{user_id}:answer')
+    redis_conn.delete(f'tg-quiz:{user_id}:answer')
 
     custom_keyboard = [['Новый вопрос', 'Сдаться'],
                        ['Мой счёт']]
@@ -69,7 +69,7 @@ def handle_new_question_request(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
     question_data = random.choice(questions)
-    redis_conn.set(f'quiz:{user_id}:answer', question_data['answer'])
+    redis_conn.set(f'tg-quiz:{user_id}:answer', question_data['answer'])
 
     update.message.reply_text(question_data['question'])
     return States.QUESTION
@@ -78,7 +78,7 @@ def handle_new_question_request(update: Update, context: CallbackContext):
 def handle_solution_attempt(update: Update, context: CallbackContext):
     redis_conn = context.bot_data['redis']
     user_id = update.effective_user.id
-    correct_answer = redis_conn.get(f'quiz:{user_id}:answer')
+    correct_answer = redis_conn.get(f'tg-quiz:{user_id}:answer')
 
     if correct_answer is None:
         update.message.reply_text(
@@ -93,7 +93,7 @@ def handle_solution_attempt(update: Update, context: CallbackContext):
         update.message.reply_text(
             'Правильно! 🎉 Для следующего вопроса нажми «Новый вопрос»'
         )
-        redis_conn.delete(f'quiz:{user_id}:answer')
+        redis_conn.delete(f'tg-quiz:{user_id}:answer')
         return States.QUESTION
     else:
         update.message.reply_text(
@@ -105,11 +105,11 @@ def handle_solution_attempt(update: Update, context: CallbackContext):
 def handle_surrender(update: Update, context: CallbackContext):
     redis_conn = context.bot_data['redis']
     user_id = update.effective_user.id
-    correct_answer = redis_conn.get(f'quiz:{user_id}:answer')
+    correct_answer = redis_conn.get(f'tg-quiz:{user_id}:answer')
 
     if correct_answer:
         update.message.reply_text(f'Правильный ответ: {correct_answer}')
-        redis_conn.delete(f'quiz:{user_id}:answer')
+        redis_conn.delete(f'tg-quiz:{user_id}:answer')
     else:
         update.message.reply_text(
             'Ты пока не задал вопрос.'

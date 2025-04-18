@@ -88,7 +88,7 @@ def main():
                 elif message == 'Новый вопрос':
                     question = random.choice(all_questions)
                     redis_conn.set(
-                        f'vk_quiz:{user_id}:answer',
+                        f'vk-quiz:{user_id}:answer',
                         question['answer']
                     )
                     vk.messages.send(
@@ -99,7 +99,7 @@ def main():
                     )
 
                 elif message == 'Сдаться':
-                    answer = redis_conn.get(f'vk_quiz:{user_id}:answer')
+                    answer = redis_conn.get(f'vk-quiz:{user_id}:answer')
                     if answer:
                         vk.messages.send(
                             user_id=user_id,
@@ -109,7 +109,7 @@ def main():
                         )
                         question = random.choice(all_questions)
                         redis_conn.set(
-                            f'vk_quiz:{user_id}:answer',
+                            f'vk-quiz:{user_id}:answer',
                             question['answer']
                         )
                         vk.messages.send(
@@ -135,7 +135,7 @@ def main():
                     )
 
                 else:
-                    correct_answer = redis_conn.get(f'vk_quiz:{user_id}:answer')
+                    correct_answer = redis_conn.get(f'vk-quiz:{user_id}:answer')
                     if correct_answer is None:
                         vk.messages.send(
                             user_id=user_id,
@@ -153,7 +153,7 @@ def main():
                                 random_id=get_random_id(),
                                 keyboard=keyboard.get_keyboard(),
                             )
-                            redis_conn.delete(f'vk_quiz:{user_id}:answer')
+                            redis_conn.delete(f'vk-quiz:{user_id}:answer')
                         else:
                             vk.messages.send(
                                 user_id=user_id,
@@ -163,10 +163,7 @@ def main():
                             )
 
             except Exception:
-                logger.error(
-                    f'Ошибка при обработке сообщения от пользователя {user_id}',
-                    exc_info=True
-                )
+                logger.exception(f'Ошибка при обработке сообщения от пользователя {user_id}')
 
 
 if __name__ == '__main__':
