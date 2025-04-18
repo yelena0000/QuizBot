@@ -44,7 +44,10 @@ def get_keyboard():
 
 
 def main():
-    logging.basicConfig(level=logging.ERROR)
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.ERROR
+    )
     logger.setLevel(logging.DEBUG)
 
     env = Env()
@@ -72,98 +75,100 @@ def main():
     keyboard = get_keyboard()
 
     for event in longpoll.listen():
-        if event.type == VkEventType.MESSAGE_NEW and event.to_me:
-            user_id = event.user_id
-            message = event.text.strip()
+        if event.type != VkEventType.MESSAGE_NEW or not event.to_me:
+            continue
 
-            try:
-                if message.lower() in ('начать', '/start'):
+        user_id = event.user_id
+        message = event.text.strip()
+
+        try:
+            if message.lower() in ('начать', '/start'):
+                vk.messages.send(
+                    user_id=user_id,
+                    message='Привет! Я бот для викторин 🧠\nНажми кнопку, чтобы начать.',
+                    random_id=get_random_id(),
+                    keyboard=keyboard.get_keyboard(),
+                )
+                continue
+
+            if message == 'Новый вопрос':
+                question = random.choice(all_questions)
+                redis_conn.set(f'vk-quiz:{user_id}:answer', question['answer'])
+                vk.messages.send(
+                    user_id=user_id,
+                    message=question['question'],
+                    random_id=get_random_id(),
+                    keyboard=keyboard.get_keyboard(),
+                )
+                continue
+
+            if message == 'Сдаться':
+                answer = redis_conn.get(f'vk-quiz:{user_id}:answer')
+                if not answer:
                     vk.messages.send(
                         user_id=user_id,
-                        message='Привет! Я бот для викторин 🧠\nНажми кнопку, чтобы начать.',
+                        message='Сначала нажми «Новый вопрос» 🙂',
                         random_id=get_random_id(),
                         keyboard=keyboard.get_keyboard(),
                     )
+                    continue
 
-                elif message == 'Новый вопрос':
-                    question = random.choice(all_questions)
-                    redis_conn.set(
-                        f'vk-quiz:{user_id}:answer',
-                        question['answer']
-                    )
-                    vk.messages.send(
-                        user_id=user_id,
-                        message=question['question'],
-                        random_id=get_random_id(),
-                        keyboard=keyboard.get_keyboard(),
-                    )
+                vk.messages.send(
+                    user_id=user_id,
+                    message=f'Правильный ответ: {answer}',
+                    random_id=get_random_id(),
+                    keyboard=keyboard.get_keyboard(),
+                )
+                question = random.choice(all_questions)
+                redis_conn.set(f'vk-quiz:{user_id}:answer', question['answer'])
+                vk.messages.send(
+                    user_id=user_id,
+                    message=question['question'],
+                    random_id=get_random_id(),
+                    keyboard=keyboard.get_keyboard(),
+                )
+                continue
 
-                elif message == 'Сдаться':
-                    answer = redis_conn.get(f'vk-quiz:{user_id}:answer')
-                    if answer:
-                        vk.messages.send(
-                            user_id=user_id,
-                            message=f'Правильный ответ: {answer}',
-                            random_id=get_random_id(),
-                            keyboard=keyboard.get_keyboard(),
-                        )
-                        question = random.choice(all_questions)
-                        redis_conn.set(
-                            f'vk-quiz:{user_id}:answer',
-                            question['answer']
-                        )
-                        vk.messages.send(
-                            user_id=user_id,
-                            message=question['question'],
-                            random_id=get_random_id(),
-                            keyboard=keyboard.get_keyboard(),
-                        )
-                    else:
-                        vk.messages.send(
-                            user_id=user_id,
-                            message='Сначала нажми «Новый вопрос» 🙂',
-                            random_id=get_random_id(),
-                            keyboard=keyboard.get_keyboard(),
-                        )
+            if message == 'Мой счёт':
+                vk.messages.send(
+                    user_id=user_id,
+                    message='Скоро будет... 😉',
+                    random_id=get_random_id(),
+                    keyboard=keyboard.get_keyboard(),
+                )
+                continue
 
-                elif message == 'Мой счёт':
-                    vk.messages.send(
-                        user_id=user_id,
-                        message='Скоро будет... 😉',
-                        random_id=get_random_id(),
-                        keyboard=keyboard.get_keyboard(),
-                    )
+            correct_answer = redis_conn.get(f'vk-quiz:{user_id}:answer')
+            if not correct_answer:
+                vk.messages.send(
+                    user_id=user_id,
+                    message='Сначала нажми «Новый вопрос» 🙂',
+                    random_id=get_random_id(),
+                    keyboard=keyboard.get_keyboard(),
+                )
+                continue
 
-                else:
-                    correct_answer = redis_conn.get(f'vk-quiz:{user_id}:answer')
-                    if correct_answer is None:
-                        vk.messages.send(
-                            user_id=user_id,
-                            message='Сначала нажми «Новый вопрос» 🙂',
-                            random_id=get_random_id(),
-                            keyboard=keyboard.get_keyboard(),
-                        )
-                    else:
-                        user_reply = message.lower()
-                        clean_answer = re.split(r'[.(]', correct_answer)[0].lower()
-                        if clean_answer in user_reply or user_reply in clean_answer:
-                            vk.messages.send(
-                                user_id=user_id,
-                                message='Правильно! 🎉 Для следующего вопроса нажми «Новый вопрос»',
-                                random_id=get_random_id(),
-                                keyboard=keyboard.get_keyboard(),
-                            )
-                            redis_conn.delete(f'vk-quiz:{user_id}:answer')
-                        else:
-                            vk.messages.send(
-                                user_id=user_id,
-                                message='Неправильно… 😢 Попробуй ещё раз или нажми «Сдаться».',
-                                random_id=get_random_id(),
-                                keyboard=keyboard.get_keyboard(),
-                            )
+            user_reply = message.lower()
+            clean_answer = re.split(r'[.(]', correct_answer)[0].lower()
+            if clean_answer in user_reply or user_reply in clean_answer:
+                vk.messages.send(
+                    user_id=user_id,
+                    message='Правильно! 🎉 Для следующего вопроса нажми «Новый вопрос»',
+                    random_id=get_random_id(),
+                    keyboard=keyboard.get_keyboard(),
+                )
+                redis_conn.delete(f'vk-quiz:{user_id}:answer')
+                continue
 
-            except Exception:
-                logger.exception(f'Ошибка при обработке сообщения от пользователя {user_id}')
+            vk.messages.send(
+                user_id=user_id,
+                message='Неправильно… 😢 Попробуй ещё раз или нажми «Сдаться».',
+                random_id=get_random_id(),
+                keyboard=keyboard.get_keyboard(),
+            )
+
+        except Exception:
+            logger.exception(f'Ошибка при обработке сообщения от пользователя {user_id}')
 
 
 if __name__ == '__main__':
